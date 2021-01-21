@@ -1,2 +1,25 @@
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+Automatic in‐line quantitative myocardial perfusion mapping:
+Processing algorithm and implementation
+Hui Xue1 | Louise A.E. Brown2 | Sonia Nielles‐Vallespin3 | Sven Plein2 |
+Peter Kellman1
+1
+National Heart, Lung and Blood Institute, National Institutes of Health, Bethesda, Maryland
+2
+Multidisciplinary Cardiovascular Research Centre (MCRC) & Leeds Institute of Cardiovascular and Metabolic Medicine, University of Leeds, Leeds,
+United Kingdom
+3
+Royal Brompton Hospital, London, United Kingdom
 
+
+
+
+
+Correspondence
+Hui Xue, National Heart, Lung and Blood
+Institute, National Institutes of Health, 10
+Center Drive, Bethesda, MD 20892.
+Email: hui.xue@nih.gov
+Funding information
+Supported by the National Heart, Lung
+and Blood Institute, National Institutes of
+Health.
