@@ -1,0 +1,1460 @@
+---
+redirect_from:
+  - "/03/deep-learning/analysis/perfusionseg"
+interact_link: content/03/deep_learning/analysis/PerfusionSeg.ipynb
+kernel_name: python3
+kernel_path: content/03/deep_learning/analysis
+has_widgets: false
+title: |-
+  Perfusion mapping analysis
+pagenum: 3
+prev_page:
+  url: /03/deep_learning/aif_detection/Perf_AIF_LV_detection.html
+next_page:
+  url: /03/test.html
+suffix: .ipynb
+search: data hui xue load perfusion mapping analysis using deep learning author nih gov image augmentation apply random crop visual train multi calss segmentation saving model
+
+comment: "***PROGRAMMATICALLY GENERATED, DO NOT EDIT. SEE ORIGINAL FILES IN /content***"
+---
+
+    <main class="jupyter-page">
+    <div id="page-info"><div id="page-title">Perfusion mapping analysis</div>
+</div>
+    <div class="jb_cell">
+
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Perfusion-mapping-analysis-using-deep-learning">Perfusion mapping analysis using deep learning<a class="anchor-link" href="#Perfusion-mapping-analysis-using-deep-learning"> </a></h1><p><strong>Author</strong>: <code>Hui Xue &lt;hui.xue@nih.gov&gt;</code></p>
+
+</div>
+</div>
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1">#import os</span>
+<span class="c1">#os.environ[&#39;CUDA_DEVICE_ORDER&#39;]=&#39;PCI_BUS_ID&#39;</span>
+<span class="c1">#os.environ[&#39;CUDA_VISIBLE_DEVICES&#39;]=&#39;1,2&#39;</span>
+
+<span class="kn">from</span> <span class="nn">IPython.core.display</span> <span class="kn">import</span> <span class="n">display</span><span class="p">,</span> <span class="n">HTML</span>
+<span class="n">display</span><span class="p">(</span><span class="n">HTML</span><span class="p">(</span><span class="s2">&quot;&lt;style&gt;.container { width:90% !important; }&lt;/style&gt;&quot;</span><span class="p">))</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<span class="kn">import</span> <span class="nn">torch.optim</span> <span class="k">as</span> <span class="nn">optim</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <span class="n">sampler</span>
+<span class="kn">import</span> <span class="nn">torch.onnx</span>
+
+<span class="kn">import</span> <span class="nn">torchvision.datasets</span> <span class="k">as</span> <span class="nn">dset</span>
+<span class="kn">import</span> <span class="nn">torchvision.transforms</span> <span class="k">as</span> <span class="nn">T</span>
+<span class="kn">from</span> <span class="nn">torchvision.utils</span> <span class="kn">import</span> <span class="o">*</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="kn">import</span> <span class="n">animation</span><span class="p">,</span> <span class="n">rc</span>
+<span class="n">animation</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;animation.writer&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;ffmpeg&#39;</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">rcParams</span><span class="p">[</span><span class="s1">&#39;animation.ffmpeg_path&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;/usr/bin/ffmpeg&#39;</span>
+
+<span class="kn">import</span> <span class="nn">scipy</span>
+<span class="kn">import</span> <span class="nn">scipy</span> <span class="k">as</span> <span class="nn">sp</span>
+<span class="kn">from</span> <span class="nn">scipy.spatial</span> <span class="kn">import</span> <span class="n">ConvexHull</span>
+<span class="kn">from</span> <span class="nn">scipy.ndimage.morphology</span> <span class="kn">import</span> <span class="n">binary_fill_holes</span>
+
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">from</span> <span class="nn">tensorboardX</span> <span class="kn">import</span> <span class="n">SummaryWriter</span>
+
+<span class="kn">from</span> <span class="nn">skimage</span> <span class="kn">import</span> <span class="n">io</span><span class="p">,</span> <span class="n">transform</span>
+<span class="kn">from</span> <span class="nn">PIL</span> <span class="kn">import</span> <span class="n">Image</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <span class="n">Dataset</span><span class="p">,</span> <span class="n">DataLoader</span>
+<span class="kn">import</span> <span class="nn">torchvision</span>
+
+<span class="kn">from</span> <span class="nn">IPython.display</span> <span class="kn">import</span> <span class="n">display</span><span class="p">,</span> <span class="n">clear_output</span><span class="p">,</span> <span class="n">HTML</span><span class="p">,</span> <span class="n">Image</span>
+
+<span class="kn">from</span> <span class="nn">PIL</span> <span class="kn">import</span> <span class="n">Image</span>
+<span class="kn">import</span> <span class="nn">imp</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+<span class="kn">import</span> <span class="nn">scipy.misc</span>
+<span class="kn">from</span> <span class="nn">glob</span> <span class="kn">import</span> <span class="n">glob</span>
+<span class="kn">import</span> <span class="nn">sklearn</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+
+<span class="o">%</span><span class="k">matplotlib</span> inline
+<span class="o">%</span><span class="k">load_ext</span> autoreload
+<span class="o">%</span><span class="k">autoreload</span> 2
+
+<span class="k">def</span> <span class="nf">show</span><span class="p">(</span><span class="n">img</span><span class="p">):</span>
+    <span class="n">npimg</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">npimg</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">npimg</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">)),</span> <span class="n">interpolation</span><span class="o">=</span><span class="s1">&#39;nearest&#39;</span><span class="p">)</span>
+    
+<span class="c1">#print(os.getcwd())</span>
+<span class="c1">#os.mkdir(&#39;./DebugOutput&#39;)</span>
+
+<span class="k">def</span> <span class="nf">save_as_image</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">img_name</span><span class="o">=</span><span class="s1">&#39;test&#39;</span><span class="p">,</span> <span class="n">img_dir</span><span class="o">=</span><span class="s1">&#39;./DebugOutput&#39;</span><span class="p">):</span>
+    <span class="n">N</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">H</span><span class="p">,</span> <span class="n">W</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">shape</span>
+    
+    <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+    
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">):</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">img_name</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;.tif&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">C</span><span class="o">==</span><span class="mi">3</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">imsave</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">a</span><span class="p">[:,:,:,</span><span class="n">n</span><span class="p">])</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">C</span><span class="o">==</span><span class="mi">1</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">imsave</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="n">a</span><span class="p">[:,:,</span><span class="mi">0</span><span class="p">,</span><span class="n">n</span><span class="p">])</span>
+            <span class="k">continue</span>
+        <span class="k">pass</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="jb_output_wrapper }}">
+<div class="output_area">
+
+
+<div class="output_html rendered_html output_subarea ">
+<style>.container { width:90% !important; }</style>
+</div>
+
+</div>
+</div>
+<div class="jb_output_wrapper }}">
+<div class="output_area">
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>The autoreload extension is already loaded. To reload it, use:
+  %reload_ext autoreload
+</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+
+<span class="kn">import</span> <span class="nn">training</span>
+<span class="kn">import</span> <span class="nn">models</span>
+<span class="kn">import</span> <span class="nn">hyper_search</span>
+<span class="kn">import</span> <span class="nn">plot_run</span>
+<span class="kn">import</span> <span class="nn">utils</span>
+<span class="kn">import</span> <span class="nn">utils.cmr_ml_utils_data</span>
+<span class="kn">import</span> <span class="nn">utils.cmr_ml_utils_plotting</span>
+
+<span class="c1"># dir(utils)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="jb_output_wrapper }}">
+<div class="output_area">
+
+<div class="output_subarea output_text output_error">
+<pre>
+<span class="ansi-red-intense-fg ansi-bold">---------------------------------------------------------------------------</span>
+<span class="ansi-red-intense-fg ansi-bold">ModuleNotFoundError</span>                       Traceback (most recent call last)
+<span class="ansi-green-intense-fg ansi-bold">&lt;ipython-input-24-cfd9ef47fea9&gt;</span> in <span class="ansi-cyan-fg">&lt;module&gt;</span>
+<span class="ansi-green-fg">      3</span> <span class="ansi-green-intense-fg ansi-bold">import</span> training
+<span class="ansi-green-fg">      4</span> <span class="ansi-green-intense-fg ansi-bold">import</span> models
+<span class="ansi-green-intense-fg ansi-bold">----&gt; 5</span><span class="ansi-yellow-intense-fg ansi-bold"> </span><span class="ansi-green-intense-fg ansi-bold">import</span> hyper_search
+<span class="ansi-green-fg">      6</span> <span class="ansi-green-intense-fg ansi-bold">import</span> plot_run
+<span class="ansi-green-fg">      7</span> <span class="ansi-green-intense-fg ansi-bold">import</span> utils
+
+<span class="ansi-red-intense-fg ansi-bold">ModuleNotFoundError</span>: No module named &#39;hyper_search&#39;</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Load-image-data">Load image data<a class="anchor-link" href="#Load-image-data"> </a></h2>
+</div>
+</div>
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">img_dir</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;/mnt/disk1/TrainingData/Perf_SAX_SEG&#39;</span><span class="p">,</span> <span class="s1">&#39;/mnt/disk1/TrainingData/Perf_SAX_SEG_Set2&#39;</span><span class="p">]</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Data-augmentation">Data augmentation<a class="anchor-link" href="#Data-augmentation"> </a></h2>
+</div>
+</div>
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">class</span> <span class="nc">RandomFlip1stDim</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Randomly flip the first dimension of numpy array.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        p (float): probability of the image being flipped. Default value is 0.5</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p</span> <span class="o">=</span> <span class="n">p</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            img ([N RO E1 ... ]): Image to be flipped.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            res: Randomly flipped image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1">#print(img[0].shape)</span>
+        <span class="c1">#print(img[1].shape)</span>
+            
+        <span class="k">if</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">:</span> 
+                                
+            <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">img</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+            <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flipud</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+            <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+            
+            <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">img</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flipud</span><span class="p">(</span><span class="n">b</span><span class="p">)</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+            <span class="k">return</span> <span class="p">(</span> <span class="n">a</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">b</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">img</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="p">)</span>
+        <span class="k">return</span> <span class="n">img</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">+</span> <span class="s1">&#39;(p=</span><span class="si">{}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">)</span>
+    
+<span class="k">class</span> <span class="nc">RandomFlip2ndDim</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Randomly flip the second dimension of numpy array.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        p (float): probability of the image being flipped. Default value is 0.5</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p</span> <span class="o">=</span> <span class="n">p</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            img ([N RO E1 ... ]): Image to be flipped.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            res: Randomly flipped image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">:</span>    
+            <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">img</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+            <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fliplr</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+            <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+            
+            <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">img</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fliplr</span><span class="p">(</span><span class="n">b</span><span class="p">)</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+            <span class="k">return</span> <span class="p">(</span> <span class="n">a</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">b</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">img</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="p">)</span>
+        <span class="k">return</span> <span class="n">img</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">+</span> <span class="s1">&#39;(p=</span><span class="si">{}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">)</span>
+    
+<span class="k">class</span> <span class="nc">RandomPermute2DT</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Randomly permute 1st and 2nd dimensions of numpy array.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        p (float): probability of the image being permuted. Default value is 0.5</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p</span> <span class="o">=</span> <span class="n">p</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            img ([N RO E1 ... ]): Image to be flipped.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            res: Randomly flipped image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">:</span>            
+            <span class="k">return</span> <span class="p">(</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">img</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">img</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">img</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="p">)</span>
+        <span class="k">return</span> <span class="n">img</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">+</span> <span class="s1">&#39;(p=</span><span class="si">{}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">)</span>    
+    
+<span class="k">class</span> <span class="nc">RandomCrop2DT</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Randomly crop the numpy array, fir 2D+T.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        p (float): probability of the image being flipped. Default value is 0.5</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">roi</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">ro_range</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">24</span><span class="p">,</span> <span class="mi">24</span><span class="p">),</span> <span class="n">e1_range</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">24</span><span class="p">,</span> <span class="mi">24</span><span class="p">),</span> <span class="n">t_range</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p</span> <span class="o">=</span> <span class="n">p</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ro_range</span> <span class="o">=</span> <span class="n">ro_range</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">e1_range</span> <span class="o">=</span> <span class="n">e1_range</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t_range</span> <span class="o">=</span> <span class="n">t_range</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            img ([Ro E1 N ... ]): Image to be cropped.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            res: Randomly cropped image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">:</span>
+                
+            <span class="n">RO</span><span class="p">,</span> <span class="n">E1</span><span class="p">,</span> <span class="n">N</span> <span class="o">=</span> <span class="n">img</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+            
+            <span class="n">roi</span> <span class="o">=</span> <span class="n">img</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+            
+            <span class="n">ps_x</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">pe_x</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">ps_y</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">pe_y</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">aif_s</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+            <span class="n">aif_e</span>  <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+                    
+            <span class="n">ro_shifts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ro_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">ro_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">e1_shifts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">e1_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">e1_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">t_shifts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                    
+            <span class="n">ss_ps_x</span> <span class="o">=</span> <span class="n">ps_x</span> <span class="o">+</span> <span class="n">ro_shifts</span>
+            <span class="n">ss_ps_y</span> <span class="o">=</span> <span class="n">ps_y</span> <span class="o">+</span> <span class="n">e1_shifts</span>
+            <span class="n">ss_ps_t</span> <span class="o">=</span> <span class="n">aif_s</span> <span class="o">+</span> <span class="n">t_shifts</span>
+
+            <span class="n">ss_pe_x</span> <span class="o">=</span> <span class="n">pe_x</span> <span class="o">+</span> <span class="n">ro_shifts</span>
+            <span class="n">ss_pe_y</span> <span class="o">=</span> <span class="n">pe_y</span> <span class="o">+</span> <span class="n">e1_shifts</span>
+            <span class="n">ss_pe_t</span> <span class="o">=</span> <span class="n">aif_e</span> <span class="o">+</span> <span class="n">t_shifts</span>
+
+            <span class="k">if</span><span class="p">(</span><span class="n">ss_ps_x</span><span class="o">&lt;</span><span class="mi">0</span> <span class="ow">or</span> <span class="n">ss_ps_y</span><span class="o">&lt;</span><span class="mi">0</span> <span class="ow">or</span> <span class="n">ss_ps_t</span><span class="o">&lt;</span><span class="mi">0</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">img</span>
+
+            <span class="k">if</span><span class="p">(</span><span class="n">ss_pe_x</span><span class="o">&gt;=</span><span class="n">RO</span> <span class="ow">and</span> <span class="n">ss_pe_y</span><span class="o">&gt;=</span><span class="n">E1</span> <span class="ow">and</span> <span class="n">ss_pe_t</span><span class="o">&gt;=</span><span class="n">N</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">img</span>
+                                                
+            <span class="n">a</span> <span class="o">=</span> <span class="n">img</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ss_ps_t</span><span class="p">:</span><span class="n">ss_pe_t</span><span class="p">,</span> <span class="n">ss_ps_x</span><span class="p">:</span><span class="n">ss_pe_x</span><span class="p">,</span> <span class="n">ss_ps_y</span><span class="p">:</span><span class="n">ss_pe_y</span><span class="p">]</span>
+            <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">img</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">,</span> <span class="n">ss_ps_x</span><span class="p">:</span><span class="n">ss_pe_x</span><span class="p">,</span> <span class="n">ss_ps_y</span><span class="p">:</span><span class="n">ss_pe_y</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>                                
+            
+            <span class="k">return</span> <span class="p">(</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">img</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">img</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">+</span> <span class="s1">&#39;(p=</span><span class="si">{}</span><span class="s1">)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">p</span><span class="p">)</span>    
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Load-data-and-apply-random-crop">Load data and apply random crop<a class="anchor-link" href="#Load-data-and-apply-random-crop"> </a></h2>
+</div>
+</div>
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">scipy.io</span>
+
+<span class="k">class</span> <span class="nc">PerfDatasetRandomCrop</span><span class="p">(</span><span class="n">Dataset</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Perfusion dataset.&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img_dir</span><span class="p">,</span> <span class="n">which_mask</span><span class="o">=</span><span class="s1">&#39;myo&#39;</span><span class="p">,</span> <span class="n">num_of_random</span><span class="o">=</span><span class="mi">9</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Args:</span>
+<span class="sd">            img_dir (string): Directory with all the images.</span>
+<span class="sd">            transform (callable, optional): Optional transform to be applied</span>
+<span class="sd">                on a sample.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">img_dir</span> <span class="o">=</span> <span class="n">img_dir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transform</span> <span class="o">=</span> <span class="n">transform</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">=</span> <span class="n">which_mask</span> <span class="c1"># myo or endo or epi</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_of_random</span> <span class="o">=</span> <span class="n">num_of_random</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">ro_range</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">24</span><span class="p">,</span> <span class="mi">24</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">e1_range</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">24</span><span class="p">,</span> <span class="mi">24</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">t_range</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+        
+        <span class="c1"># find all images</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">case_dir</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">img_dir</span><span class="p">:</span>
+            <span class="n">locations</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">case_dir</span><span class="p">)</span>            
+            <span class="k">for</span> <span class="n">loc</span> <span class="ow">in</span> <span class="n">locations</span><span class="p">:</span>
+                <span class="k">if</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">case_dir</span><span class="p">,</span> <span class="n">loc</span><span class="p">))):</span>
+                    <span class="n">a</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">case_dir</span><span class="p">,</span> <span class="n">loc</span><span class="p">)))</span>
+
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Found </span><span class="si">%d</span><span class="s2"> cases ... &quot;</span> <span class="o">%</span> <span class="n">num_samples</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">Gd</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endo_masks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epi_masks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">myo_masks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_masks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rvi_masks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rv_masks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rv_rvi_masks</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rvi_pt</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">names</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">t0</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Start loading cases ... &quot;</span><span class="p">)</span>
+        
+        <span class="n">total_case_loaded</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">total_num_loaded</span> <span class="o">=</span> <span class="mi">0</span>
+        
+        <span class="k">for</span> <span class="n">case_dir</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">img_dir</span><span class="p">:</span>
+            <span class="n">locations</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">case_dir</span><span class="p">)</span> 
+            <span class="k">for</span> <span class="n">loc</span> <span class="ow">in</span> <span class="n">locations</span><span class="p">:</span>
+                <span class="n">a</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">case_dir</span><span class="p">,</span> <span class="n">loc</span><span class="p">))</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;---&gt; Start loading &#39;</span><span class="p">,</span> <span class="n">case_dir</span><span class="p">,</span> <span class="n">loc</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">ii</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">a</span><span class="p">):</span>      
+
+
+                    <span class="c1">#if (ii&gt;5):</span>
+                    <span class="c1">#    break</span>
+
+                    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;------&gt; Start loading </span><span class="si">%d</span><span class="s1"> out of </span><span class="si">%d</span><span class="s1">, </span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">total_case_loaded</span><span class="p">,</span> <span class="n">num_samples</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>
+                    <span class="n">name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>       
+
+                    <span class="n">is_seg_norm</span> <span class="o">=</span> <span class="kc">True</span>
+
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">mat</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">loadmat</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">case_dir</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="s1">&#39;Seg_norm.mat&#39;</span><span class="p">))</span>
+                    <span class="k">except</span><span class="p">:</span>
+                        <span class="n">mat</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">loadmat</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">case_dir</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="s1">&#39;Seg.mat&#39;</span><span class="p">))</span>
+                        <span class="n">is_seg_norm</span> <span class="o">=</span> <span class="kc">False</span>
+
+                    <span class="n">Seg</span> <span class="o">=</span> <span class="n">mat</span><span class="p">[</span><span class="s1">&#39;Seg&#39;</span><span class="p">]</span> 
+                    <span class="n">num_seg</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+                    <span class="n">Gd_all</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_one_data</span><span class="p">(</span><span class="n">case_dir</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="s1">&#39;Gd_resized_norm&#39;</span><span class="p">)</span>
+                    <span class="n">roi_all</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_one_data</span><span class="p">(</span><span class="n">case_dir</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="s1">&#39;roi&#39;</span><span class="p">)</span>
+
+                    <span class="n">total_case_loaded</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">num_seg</span><span class="p">):</span>
+
+                        <span class="n">Gd</span> <span class="o">=</span> <span class="n">Gd_all</span><span class="p">[:,:,:,</span><span class="n">i</span><span class="p">]</span>
+
+                        <span class="n">endo</span><span class="p">,</span> <span class="n">epi</span><span class="p">,</span> <span class="n">myo</span><span class="p">,</span> <span class="n">endo_epi</span><span class="p">,</span> <span class="n">endo_epi_rv</span><span class="p">,</span> <span class="n">endo_epi_rv_rvi</span><span class="p">,</span> <span class="n">endo_epi_rvi</span><span class="p">,</span> <span class="n">rvi_pt</span><span class="p">,</span> <span class="n">roi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_from_Seg</span><span class="p">(</span><span class="n">Seg</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">is_seg_norm</span><span class="p">)</span>
+                        <span class="n">Gd</span><span class="p">,</span> <span class="n">endo</span><span class="p">,</span> <span class="n">epi</span><span class="p">,</span> <span class="n">myo</span><span class="p">,</span> <span class="n">endo_epi</span><span class="p">,</span> <span class="n">endo_epi_rv</span><span class="p">,</span> <span class="n">endo_epi_rv_rvi</span><span class="p">,</span> <span class="n">endo_epi_rvi</span><span class="p">,</span> <span class="n">rvi_pt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_from_numpy_array</span><span class="p">(</span><span class="n">Gd</span><span class="p">,</span> <span class="n">endo</span><span class="p">,</span> <span class="n">epi</span><span class="p">,</span> <span class="n">myo</span><span class="p">,</span> <span class="n">endo_epi</span><span class="p">,</span> <span class="n">endo_epi_rv</span><span class="p">,</span> <span class="n">endo_epi_rv_rvi</span><span class="p">,</span> <span class="n">endo_epi_rvi</span><span class="p">,</span> <span class="n">rvi_pt</span><span class="p">)</span>
+
+                        <span class="c1"># roi = roi_all.flatten()</span>
+
+                        <span class="n">roi</span> <span class="o">=</span> <span class="n">roi</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+
+                        <span class="n">N</span><span class="p">,</span> <span class="n">RO</span><span class="p">,</span> <span class="n">E1</span> <span class="o">=</span> <span class="n">Gd</span><span class="o">.</span><span class="n">shape</span>
+
+                        <span class="n">ro_shifts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ro_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">ro_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_of_random</span><span class="p">)</span>
+                        <span class="n">e1_shifts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">e1_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">e1_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_of_random</span><span class="p">)</span>
+                        <span class="n">t_shifts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">t_range</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">t_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_of_random</span><span class="p">)</span>
+
+                        <span class="n">ps_x</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+                        <span class="n">pe_x</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+                        <span class="n">ps_y</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+                        <span class="n">pe_y</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+                        <span class="n">aif_s</span> <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+                        <span class="n">aif_e</span>  <span class="o">=</span> <span class="n">roi</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+
+                        <span class="k">if</span> <span class="p">(</span><span class="n">i</span><span class="o">==</span><span class="mi">0</span><span class="p">):</span>
+                            <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;    ro, [start, end] = </span><span class="si">%d</span><span class="s1">, </span><span class="si">%d</span><span class="s1">; e1, [start, end] = </span><span class="si">%d</span><span class="s1">, </span><span class="si">%d</span><span class="s1">; t, [start, end] = </span><span class="si">%d</span><span class="s1">, </span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">ps_x</span><span class="p">,</span> <span class="n">pe_x</span><span class="p">,</span> <span class="n">ps_y</span><span class="p">,</span> <span class="n">pe_y</span><span class="p">,</span> <span class="n">aif_s</span><span class="p">,</span> <span class="n">aif_e</span><span class="p">))</span>
+
+                        <span class="c1"># print(&#39;    Gd = %f, endo = %f, epi = %f&#39; % (np.linalg.norm(Gd), np.linalg.norm(endo), np.linalg.norm(epi)))</span>
+
+                        <span class="c1"># random crop</span>
+                        <span class="k">for</span> <span class="n">rc</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_of_random</span><span class="o">+</span><span class="mi">1</span><span class="p">):</span>
+
+                            <span class="k">if</span><span class="p">(</span><span class="n">rc</span><span class="o">==</span><span class="bp">self</span><span class="o">.</span><span class="n">num_of_random</span><span class="p">):</span>
+                                <span class="n">ss_ps_x</span> <span class="o">=</span> <span class="n">ps_x</span><span class="p">;</span>
+                                <span class="n">ss_ps_y</span> <span class="o">=</span> <span class="n">ps_y</span><span class="p">;</span>
+                                <span class="n">ss_ps_t</span> <span class="o">=</span> <span class="n">aif_s</span><span class="p">;</span>
+
+                                <span class="n">ss_pe_x</span> <span class="o">=</span> <span class="n">pe_x</span><span class="p">;</span>
+                                <span class="n">ss_pe_y</span> <span class="o">=</span> <span class="n">pe_y</span><span class="p">;</span>
+                                <span class="n">ss_pe_t</span> <span class="o">=</span> <span class="n">aif_e</span><span class="p">;</span>
+                            <span class="k">else</span><span class="p">:</span>
+                                <span class="n">ss_ps_x</span> <span class="o">=</span> <span class="n">ps_x</span> <span class="o">+</span> <span class="n">ro_shifts</span><span class="p">[</span><span class="n">rc</span><span class="p">];</span>
+                                <span class="n">ss_ps_y</span> <span class="o">=</span> <span class="n">ps_y</span> <span class="o">+</span> <span class="n">e1_shifts</span><span class="p">[</span><span class="n">rc</span><span class="p">];</span>
+                                <span class="n">ss_ps_t</span> <span class="o">=</span> <span class="n">aif_s</span> <span class="o">+</span> <span class="n">t_shifts</span><span class="p">[</span><span class="n">rc</span><span class="p">];</span>
+
+                                <span class="n">ss_pe_x</span> <span class="o">=</span> <span class="n">pe_x</span> <span class="o">+</span> <span class="n">ro_shifts</span><span class="p">[</span><span class="n">rc</span><span class="p">];</span>
+                                <span class="n">ss_pe_y</span> <span class="o">=</span> <span class="n">pe_y</span> <span class="o">+</span> <span class="n">e1_shifts</span><span class="p">[</span><span class="n">rc</span><span class="p">];</span>
+                                <span class="n">ss_pe_t</span> <span class="o">=</span> <span class="n">aif_e</span> <span class="o">+</span> <span class="n">t_shifts</span><span class="p">[</span><span class="n">rc</span><span class="p">];</span>
+
+                            <span class="k">if</span><span class="p">(</span><span class="n">ss_ps_t</span><span class="o">&lt;</span><span class="mi">0</span><span class="p">):</span>
+                                <span class="n">ss_ps_t</span><span class="o">=</span><span class="mi">0</span>
+                                <span class="n">ss_pe_t</span><span class="o">=</span><span class="mi">48</span>
+
+                            <span class="k">if</span><span class="p">(</span><span class="n">ss_pe_t</span><span class="o">&gt;</span><span class="n">N</span><span class="p">):</span>                            
+                                <span class="n">ss_pe_t</span><span class="o">=</span><span class="n">N</span>
+                                <span class="n">ss_ps_t</span><span class="o">=</span><span class="n">ss_pe_t</span><span class="o">-</span><span class="mi">48</span>
+
+                            <span class="k">if</span><span class="p">(</span><span class="n">ss_ps_x</span><span class="o">&lt;</span><span class="mi">0</span> <span class="ow">or</span> <span class="n">ss_ps_y</span><span class="o">&lt;</span><span class="mi">0</span> <span class="ow">or</span> <span class="n">ss_ps_t</span><span class="o">&lt;</span><span class="mi">0</span><span class="p">):</span>
+                                <span class="k">continue</span><span class="p">;</span>
+
+                            <span class="k">if</span><span class="p">(</span><span class="n">ss_pe_x</span><span class="o">&gt;</span><span class="n">RO</span> <span class="ow">and</span> <span class="n">ss_pe_y</span><span class="o">&gt;</span><span class="n">E1</span> <span class="ow">and</span> <span class="n">ss_pe_t</span><span class="o">&gt;</span><span class="n">N</span><span class="p">):</span>
+                                <span class="k">continue</span><span class="p">;</span>
+
+
+                            <span class="n">Gd_s</span> <span class="o">=</span> <span class="n">Gd</span><span class="p">[</span><span class="n">ss_ps_t</span><span class="p">:</span><span class="n">ss_pe_t</span><span class="p">,</span> <span class="n">ss_ps_x</span><span class="p">:</span><span class="n">ss_pe_x</span><span class="p">,</span> <span class="n">ss_ps_y</span><span class="p">:</span><span class="n">ss_pe_y</span><span class="p">]</span>
+                            <span class="n">endo_s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">endo</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">ss_ps_x</span><span class="p">:</span><span class="n">ss_pe_x</span><span class="p">,</span> <span class="n">ss_ps_y</span><span class="p">:</span><span class="n">ss_pe_y</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                            <span class="n">epi_s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">epi</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">ss_ps_x</span><span class="p">:</span><span class="n">ss_pe_x</span><span class="p">,</span> <span class="n">ss_ps_y</span><span class="p">:</span><span class="n">ss_pe_y</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                            <span class="n">myo_s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">myo</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">ss_ps_x</span><span class="p">:</span><span class="n">ss_pe_x</span><span class="p">,</span> <span class="n">ss_ps_y</span><span class="p">:</span><span class="n">ss_pe_y</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                            <span class="n">endo_epi_s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">endo_epi</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">ss_ps_x</span><span class="p">:</span><span class="n">ss_pe_x</span><span class="p">,</span> <span class="n">ss_ps_y</span><span class="p">:</span><span class="n">ss_pe_y</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                            <span class="n">endo_epi_rv_s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">endo_epi_rv</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">ss_ps_x</span><span class="p">:</span><span class="n">ss_pe_x</span><span class="p">,</span> <span class="n">ss_ps_y</span><span class="p">:</span><span class="n">ss_pe_y</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                            <span class="n">endo_epi_rvi_s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">endo_epi_rvi</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">ss_ps_x</span><span class="p">:</span><span class="n">ss_pe_x</span><span class="p">,</span> <span class="n">ss_ps_y</span><span class="p">:</span><span class="n">ss_pe_y</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                            <span class="n">endo_epi_rv_rvi_s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">endo_epi_rv_rvi</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">ss_ps_x</span><span class="p">:</span><span class="n">ss_pe_x</span><span class="p">,</span> <span class="n">ss_ps_y</span><span class="p">:</span><span class="n">ss_pe_y</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+                            <span class="n">Gd_s</span> <span class="o">=</span> <span class="n">Gd_s</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">Gd_s</span><span class="p">)</span>
+
+                            <span class="k">if</span><span class="p">(</span><span class="n">Gd_s</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">48</span><span class="p">):</span>
+                                <span class="k">continue</span><span class="p">;</span>
+                            <span class="k">if</span><span class="p">(</span><span class="n">Gd_s</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">176</span><span class="p">):</span>
+                                <span class="k">continue</span><span class="p">;</span>
+                            <span class="k">if</span><span class="p">(</span><span class="n">Gd_s</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">176</span><span class="p">):</span>
+                                <span class="k">continue</span><span class="p">;</span>
+
+                            <span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Gd_s</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">endo_masks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">endo_s</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">epi_masks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">epi_s</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">myo_masks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">myo_s</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_masks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">endo_epi_s</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rv_masks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">endo_epi_rv_s</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rv_rvi_masks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">endo_epi_rv_rvi_s</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rvi_masks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">endo_epi_rvi_s</span><span class="p">)</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">rvi_pt</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rvi_pt</span><span class="p">)</span>
+
+                            <span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+
+                    <span class="n">total_num_loaded</span> <span class="o">+=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_of_random</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+
+                    <span class="n">t1</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;             Time from starting : </span><span class="si">%f</span><span class="s2"> seconds ... </span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">t1</span><span class="o">-</span><span class="n">t0</span><span class="p">))</span>
+
+                    <span class="c1">#if total_num_loaded%100 == 0 and ii&gt;0:</span>
+                    <span class="c1">#    print(&quot;load %d &quot; % total_num_loaded)                                </span>
+        
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">):</span>
+        
+        <span class="k">if</span> <span class="n">idx</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="s2">&quot;invalid index&quot;</span>
+        
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">==</span> <span class="s1">&#39;myo&#39;</span><span class="p">):</span>            
+            <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">myo_masks</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">==</span> <span class="s1">&#39;endo&#39;</span><span class="p">):</span>            
+            <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">endo_masks</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">==</span> <span class="s1">&#39;epi&#39;</span><span class="p">):</span>            
+            <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">epi_masks</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">==</span> <span class="s1">&#39;endo_epi&#39;</span><span class="p">):</span>            
+            <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_masks</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">==</span> <span class="s1">&#39;endo_epi_rvi&#39;</span><span class="p">):</span>            
+            <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rvi_masks</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">==</span> <span class="s1">&#39;endo_epi_rv&#39;</span><span class="p">):</span>            
+            <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rv_masks</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">==</span> <span class="s1">&#39;endo_epi_rv_rvi&#39;</span><span class="p">):</span>            
+            <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rv_rvi_masks</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">==</span> <span class="s1">&#39;endo_epi_rv,rvi&#39;</span><span class="p">):</span>            
+            <span class="n">sample</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rv_masks</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">rvi_pt</span><span class="p">[</span><span class="n">idx</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">names</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">:</span>
+            <span class="n">sample</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">sample</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">sample</span>
+    
+    <span class="k">def</span> <span class="nf">load_one_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">case_dir</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">f_prefix</span><span class="p">):</span>
+        
+        <span class="n">f_name</span> <span class="o">=</span> <span class="n">f_prefix</span> <span class="o">+</span> <span class="s1">&#39;.npy&#39;</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">case_dir</span><span class="p">,</span> <span class="n">loc</span><span class="p">,</span> <span class="n">f_name</span><span class="p">))</span>                    
+                       
+        <span class="nb">print</span> <span class="p">(</span><span class="s1">&#39;Loaded &#39;</span><span class="p">,</span> <span class="n">f_name</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">data</span>
+    
+    <span class="k">def</span> <span class="nf">load_from_numpy_array</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Gd</span><span class="p">,</span> <span class="n">endo_mask</span><span class="p">,</span> <span class="n">epi_mask</span><span class="p">,</span> \
+                              <span class="n">myo_mask</span><span class="p">,</span> <span class="n">endo_epi_mask</span><span class="p">,</span> <span class="n">endo_epi_rv_mask</span><span class="p">,</span> \
+                              <span class="n">endo_epi_rv_rv_insertion_mask</span><span class="p">,</span> <span class="n">endo_epi_rv_insertion_mask</span><span class="p">,</span> \
+                              <span class="n">rv_insertion_pt</span><span class="p">):</span>
+                       
+        
+        <span class="n">Gd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">Gd</span><span class="p">)</span>
+        <span class="c1"># Gd = Gd / np.max(Gd)</span>
+        <span class="n">Gd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">Gd</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+                       
+        <span class="n">endo</span> <span class="o">=</span> <span class="n">endo_mask</span>
+        <span class="n">endo</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">endo</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">endo</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">endo</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+                       
+        <span class="n">epi</span> <span class="o">=</span> <span class="n">epi_mask</span>
+        <span class="n">epi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">epi</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">epi</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">epi</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        
+        <span class="n">myo</span> <span class="o">=</span> <span class="n">myo_mask</span>
+        <span class="n">myo</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">myo</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">myo</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">myo</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+                       
+        <span class="n">endo_epi</span> <span class="o">=</span> <span class="n">endo_epi_mask</span>
+        <span class="n">endo_epi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">endo_epi</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">endo_epi</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">endo_epi</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+                       
+        <span class="n">endo_epi_rv</span> <span class="o">=</span> <span class="n">endo_epi_rv_mask</span>
+        <span class="n">endo_epi_rv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">endo_epi_rv</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">endo_epi_rv</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">endo_epi_rv</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+                       
+        <span class="n">endo_epi_rv_rvi</span> <span class="o">=</span> <span class="n">endo_epi_rv_rv_insertion_mask</span>
+        <span class="n">endo_epi_rv_rvi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">endo_epi_rv_rvi</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">endo_epi_rv_rvi</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">endo_epi_rv_rvi</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+                       
+        <span class="n">endo_epi_rvi</span> <span class="o">=</span> <span class="n">endo_epi_rv_insertion_mask</span>
+        <span class="n">endo_epi_rvi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">endo_epi_rvi</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">endo_epi_rvi</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">endo_epi_rvi</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+                       
+        <span class="n">rvi_pt</span> <span class="o">=</span> <span class="n">rv_insertion_pt</span>
+                       
+        <span class="k">return</span> <span class="n">Gd</span><span class="p">,</span> <span class="n">endo</span><span class="p">,</span> <span class="n">epi</span><span class="p">,</span> <span class="n">myo</span><span class="p">,</span> <span class="n">endo_epi</span><span class="p">,</span> <span class="n">endo_epi_rv</span><span class="p">,</span> <span class="n">endo_epi_rv_rvi</span><span class="p">,</span> <span class="n">endo_epi_rvi</span><span class="p">,</span> <span class="n">rvi_pt</span>
+    
+    <span class="k">def</span> <span class="nf">load_from_Seg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Seg</span><span class="p">,</span> <span class="n">ind</span><span class="p">,</span> <span class="n">is_seg_norm</span><span class="p">):</span>
+
+        <span class="k">if</span><span class="p">(</span><span class="n">is_seg_norm</span><span class="p">):</span>
+            <span class="n">endo</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;endo_resized_mask_norm&#39;</span><span class="p">]</span>
+            <span class="n">epi</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;epi_resized_mask_norm&#39;</span><span class="p">]</span>
+            <span class="n">myo</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;myo_resized_mask_norm&#39;</span><span class="p">]</span>
+            <span class="n">endo_epi</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;endo_epi_resized_mask_norm&#39;</span><span class="p">]</span>
+            <span class="n">endo_epi_rv</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;endo_epi_rv_resized_mask_norm&#39;</span><span class="p">]</span>
+            <span class="n">endo_epi_rv_rvi</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;endo_epi_rv_rvi_resized_mask_norm&#39;</span><span class="p">]</span>
+            <span class="n">endo_epi_rvi</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;endo_epi_rvi_resized_mask_norm&#39;</span><span class="p">]</span>
+            <span class="n">rvi_pt</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;rvi_resized_norm&#39;</span><span class="p">]</span>
+            <span class="n">roi</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;roi_norm&#39;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">endo</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;endo_resized_mask&#39;</span><span class="p">]</span>
+            <span class="n">epi</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;epi_resized_mask&#39;</span><span class="p">]</span>
+            <span class="n">myo</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;myo_resized_mask&#39;</span><span class="p">]</span>
+            <span class="n">endo_epi</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;endo_epi_resized_mask&#39;</span><span class="p">]</span>
+            <span class="n">endo_epi_rv</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;endo_epi_rv_resized_mask&#39;</span><span class="p">]</span>
+            <span class="n">endo_epi_rv_rvi</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;endo_epi_rv_rvi_resized_mask&#39;</span><span class="p">]</span>
+            <span class="n">endo_epi_rvi</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;endo_epi_rvi_resized_mask&#39;</span><span class="p">]</span>
+            <span class="n">rvi_pt</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;rvi_resized&#39;</span><span class="p">]</span>
+            <span class="n">roi</span> <span class="o">=</span> <span class="n">Seg</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">ind</span><span class="p">][</span><span class="s1">&#39;roi&#39;</span><span class="p">]</span>
+            
+        <span class="sd">&#39;&#39;&#39;print(Gd.shape)</span>
+<span class="sd">        print(endo.shape)</span>
+<span class="sd">        print(epi.shape)</span>
+<span class="sd">        print(myo.shape)</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        
+        <span class="c1"># Gd = Gd / np.max(Gd)</span>
+
+        <span class="c1"># Gd = np.transpose(Gd, (2, 0, 1))</span>
+        <span class="sd">&#39;&#39;&#39;</span>
+<span class="sd">        endo = np.reshape(endo, (1, endo.shape[0], endo.shape[1]))</span>
+<span class="sd">        epi = np.reshape(epi, (1, epi.shape[0], epi.shape[1]))</span>
+<span class="sd">        myo = np.reshape(myo, (1, myo.shape[0], myo.shape[1]))</span>
+<span class="sd">        endo_epi = np.reshape(endo_epi, (1, endo_epi.shape[0], endo_epi.shape[1]))</span>
+<span class="sd">        endo_epi_rv = np.reshape(endo_epi_rv, (1, endo_epi_rv.shape[0], endo_epi_rv.shape[1]))</span>
+<span class="sd">        endo_epi_rv_rvi = np.reshape(endo_epi_rv_rvi, (1, endo_epi_rv_rvi.shape[0], endo_epi_rv_rvi.shape[1]))</span>
+<span class="sd">        endo_epi_rvi = np.reshape(endo_epi_rvi, (1, endo_epi_rvi.shape[0], endo_epi_rvi.shape[1]))</span>
+<span class="sd">        &#39;&#39;&#39;</span>
+        
+        <span class="k">return</span> <span class="p">(</span><span class="n">endo</span><span class="p">,</span> <span class="n">epi</span><span class="p">,</span> <span class="n">myo</span><span class="p">,</span> <span class="n">endo_epi</span><span class="p">,</span> <span class="n">endo_epi_rv</span><span class="p">,</span> <span class="n">endo_epi_rv_rvi</span><span class="p">,</span> <span class="n">endo_epi_rvi</span><span class="p">,</span> <span class="n">rvi_pt</span><span class="p">,</span> <span class="n">roi</span><span class="p">)</span>
+    
+    <span class="k">def</span> <span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;Perfusion Dataset</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  image root: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">img_dir</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  Number of samples: </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  Number of masks: </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">myo_masks</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  image shape: </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  myo mask shape: </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">myo_masks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  endo mask shape: </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">endo_masks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  epi mask shape: </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">epi_masks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  endo_epi mask shape: </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_masks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  endo_epi_rv mask shape: </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rv_masks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  endo_epi_rvi mask shape: </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rvi_masks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  endo_epi_rv_rvi mask shape: </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">endo_epi_rv_rvi_masks</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+            <span class="nb">str</span> <span class="o">+=</span> <span class="s2">&quot;  rvi_pt shape: </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">rvi_pt</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+        <span class="k">return</span> <span class="nb">str</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">num_of_random</span> <span class="o">=</span> <span class="mi">16</span>
+
+<span class="n">perf_dataset</span> <span class="o">=</span> <span class="n">PerfDatasetRandomCrop</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">num_of_random</span><span class="o">=</span><span class="n">num_of_random</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Done&quot;</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="jb_output_wrapper }}">
+<div class="output_area">
+
+<div class="output_subarea output_text output_error">
+<pre>
+<span class="ansi-red-intense-fg ansi-bold">---------------------------------------------------------------------------</span>
+<span class="ansi-red-intense-fg ansi-bold">FileNotFoundError</span>                         Traceback (most recent call last)
+<span class="ansi-green-intense-fg ansi-bold">&lt;ipython-input-22-4ad5f90808e0&gt;</span> in <span class="ansi-cyan-fg">&lt;module&gt;</span>
+<span class="ansi-green-fg">      1</span> num_of_random <span class="ansi-yellow-intense-fg ansi-bold">=</span> <span class="ansi-cyan-intense-fg ansi-bold">16</span>
+<span class="ansi-green-fg">      2</span> 
+<span class="ansi-green-intense-fg ansi-bold">----&gt; 3</span><span class="ansi-yellow-intense-fg ansi-bold"> </span>perf_dataset <span class="ansi-yellow-intense-fg ansi-bold">=</span> PerfDatasetRandomCrop<span class="ansi-yellow-intense-fg ansi-bold">(</span>img_dir<span class="ansi-yellow-intense-fg ansi-bold">,</span> num_of_random<span class="ansi-yellow-intense-fg ansi-bold">=</span>num_of_random<span class="ansi-yellow-intense-fg ansi-bold">)</span>
+<span class="ansi-green-fg">      4</span> print<span class="ansi-yellow-intense-fg ansi-bold">(</span><span class="ansi-blue-intense-fg ansi-bold">&#34;Done&#34;</span><span class="ansi-yellow-intense-fg ansi-bold">)</span>
+
+<span class="ansi-green-intense-fg ansi-bold">&lt;ipython-input-21-bc82e1cdf577&gt;</span> in <span class="ansi-cyan-fg">__init__</span><span class="ansi-blue-intense-fg ansi-bold">(self, img_dir, which_mask, num_of_random, transform)</span>
+<span class="ansi-green-fg">     23</span>         a <span class="ansi-yellow-intense-fg ansi-bold">=</span> <span class="ansi-yellow-intense-fg ansi-bold">[</span><span class="ansi-yellow-intense-fg ansi-bold">]</span>
+<span class="ansi-green-fg">     24</span>         <span class="ansi-green-intense-fg ansi-bold">for</span> case_dir <span class="ansi-green-intense-fg ansi-bold">in</span> self<span class="ansi-yellow-intense-fg ansi-bold">.</span>img_dir<span class="ansi-yellow-intense-fg ansi-bold">:</span>
+<span class="ansi-green-intense-fg ansi-bold">---&gt; 25</span><span class="ansi-yellow-intense-fg ansi-bold">             </span>locations <span class="ansi-yellow-intense-fg ansi-bold">=</span> os<span class="ansi-yellow-intense-fg ansi-bold">.</span>listdir<span class="ansi-yellow-intense-fg ansi-bold">(</span>case_dir<span class="ansi-yellow-intense-fg ansi-bold">)</span>
+<span class="ansi-green-fg">     26</span>             <span class="ansi-green-intense-fg ansi-bold">for</span> loc <span class="ansi-green-intense-fg ansi-bold">in</span> locations<span class="ansi-yellow-intense-fg ansi-bold">:</span>
+<span class="ansi-green-fg">     27</span>                 <span class="ansi-green-intense-fg ansi-bold">if</span><span class="ansi-yellow-intense-fg ansi-bold">(</span>os<span class="ansi-yellow-intense-fg ansi-bold">.</span>path<span class="ansi-yellow-intense-fg ansi-bold">.</span>isdir<span class="ansi-yellow-intense-fg ansi-bold">(</span>os<span class="ansi-yellow-intense-fg ansi-bold">.</span>path<span class="ansi-yellow-intense-fg ansi-bold">.</span>join<span class="ansi-yellow-intense-fg ansi-bold">(</span>case_dir<span class="ansi-yellow-intense-fg ansi-bold">,</span> loc<span class="ansi-yellow-intense-fg ansi-bold">)</span><span class="ansi-yellow-intense-fg ansi-bold">)</span><span class="ansi-yellow-intense-fg ansi-bold">)</span><span class="ansi-yellow-intense-fg ansi-bold">:</span>
+
+<span class="ansi-red-intense-fg ansi-bold">FileNotFoundError</span>: [WinError 3] The system cannot find the path specified: &#39;/mnt/disk1/TrainingData/Perf_SAX_SEG&#39;</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">perf_dataset</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">transform</span><span class="o">=</span><span class="n">torchvision</span><span class="o">.</span><span class="n">transforms</span><span class="o">.</span><span class="n">Compose</span><span class="p">([</span><span class="n">RandomFlip1stDim</span><span class="p">(</span><span class="mf">0.5</span><span class="p">),</span> <span class="n">RandomFlip2ndDim</span><span class="p">(</span><span class="mf">0.5</span><span class="p">),</span> <span class="n">RandomPermute2DT</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)])</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">perf_dataset</span><span class="o">.</span><span class="n">transform</span> <span class="o">=</span> <span class="n">transform</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">perf_dataset</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Visual-a-data">Visual a data<a class="anchor-link" href="#Visual-a-data"> </a></h2>
+</div>
+</div>
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">=</span> <span class="s1">&#39;myo&#39;</span>
+<span class="n">sample</span> <span class="o">=</span> <span class="n">perf_dataset</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+
+<span class="n">im</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+<span class="n">utils</span><span class="o">.</span><span class="n">cmr_ml_utils_plotting</span><span class="o">.</span><span class="n">plot_image_array</span><span class="p">(</span><span class="n">im</span><span class="p">[:,:,</span> <span class="mi">24</span><span class="p">],</span> <span class="n">columns</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>
+
+<span class="n">a</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">b</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+<span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">=</span> <span class="s1">&#39;endo&#39;</span>
+<span class="n">sample2</span> <span class="o">=</span> <span class="n">perf_dataset</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">=</span> <span class="s1">&#39;epi&#39;</span>
+<span class="n">sample3</span> <span class="o">=</span> <span class="n">perf_dataset</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">=</span> <span class="s1">&#39;endo_epi&#39;</span>
+<span class="n">sample4</span> <span class="o">=</span> <span class="n">perf_dataset</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">=</span> <span class="s1">&#39;endo_epi_rv&#39;</span>
+<span class="n">sample5</span> <span class="o">=</span> <span class="n">perf_dataset</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">=</span> <span class="s1">&#39;endo_epi_rv_rvi&#39;</span>
+<span class="n">sample6</span> <span class="o">=</span> <span class="n">perf_dataset</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">=</span> <span class="s1">&#39;endo_epi_rvi&#39;</span>
+<span class="n">sample7</span> <span class="o">=</span> <span class="n">perf_dataset</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">32</span><span class="p">,</span> <span class="mi">32</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">171</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">172</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">sample2</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">173</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">sample3</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">174</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">sample4</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">175</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">sample5</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">176</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">sample6</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">177</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">sample7</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Train-with-multi-calss-segmentation">Train with multi-calss segmentation<a class="anchor-link" href="#Train-with-multi-calss-segmentation"> </a></h2>
+</div>
+</div>
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">transform</span><span class="o">=</span><span class="n">torchvision</span><span class="o">.</span><span class="n">transforms</span><span class="o">.</span><span class="n">Compose</span><span class="p">([</span><span class="n">RandomFlip1stDim</span><span class="p">(</span><span class="mf">0.5</span><span class="p">),</span> <span class="n">RandomFlip2ndDim</span><span class="p">(</span><span class="mf">0.5</span><span class="p">),</span> <span class="n">RandomPermute2DT</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)])</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">num_of_random</span> <span class="o">=</span> <span class="mi">16</span>
+
+<span class="n">perf_dataset</span> <span class="o">=</span> <span class="n">PerfDatasetRandomCrop</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">num_of_random</span><span class="o">=</span><span class="n">num_of_random</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Done&quot;</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">perf_dataset</span><span class="o">.</span><span class="n">transform</span> <span class="o">=</span> <span class="n">transform</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">perf_dataset</span><span class="o">.</span><span class="n">transform</span> <span class="o">=</span> <span class="kc">None</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">utils.cmr_ml_utils_data</span>
+
+<span class="n">k</span> <span class="o">=</span> <span class="mi">12</span>
+
+<span class="c1"># Chunk into k random sets</span>
+<span class="n">chunks</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">cmr_ml_utils_data</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">perf_dataset</span><span class="p">)),</span> <span class="n">k</span><span class="p">)</span>
+<span class="n">train_idxs</span><span class="p">,</span> <span class="n">val_idxs</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">cmr_ml_utils_data</span><span class="o">.</span><span class="n">get_k_fold_training_validation</span><span class="p">(</span><span class="n">chunks</span><span class="p">,</span> <span class="n">val_chunk</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="n">num_train</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">train_idxs</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;num_train = </span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">num_train</span><span class="p">)</span>
+<span class="n">num_val</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">val_idxs</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">&#39;num_val = </span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">num_val</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">=</span> <span class="s1">&#39;endo_epi_rv&#39;</span>
+<span class="n">num_classes</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">class_for_accu</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="c1"># endo,epi, rv</span>
+<span class="n">class_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">num_classes</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">class_weights</span><span class="p">)</span>
+<span class="n">p_thres</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span><span class="p">)</span>
+
+<span class="n">sample</span> <span class="o">=</span> <span class="n">perf_dataset</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">sample</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">batch_size</span> <span class="o">=</span> <span class="mi">64</span>
+
+<span class="n">loader_for_train</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">perf_dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> 
+                          <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="o">.</span><span class="n">SubsetRandomSampler</span><span class="p">(</span><span class="n">train_idxs</span><span class="p">))</span>
+
+<span class="n">loader_for_val</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">perf_dataset</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="n">batch_size</span><span class="p">,</span> 
+                        <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="o">.</span><span class="n">SubsetRandomSampler</span><span class="p">(</span><span class="n">val_idxs</span><span class="p">))</span>
+
+<span class="n">iter_train</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">loader_for_train</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">images</span><span class="p">,</span> <span class="n">masks</span><span class="p">,</span> <span class="n">names</span> <span class="o">=</span> <span class="n">iter_train</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+
+<span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">RO</span><span class="p">,</span> <span class="n">E1</span> <span class="o">=</span> <span class="n">images</span><span class="o">.</span><span class="n">shape</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">images</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">masks</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">images</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">masks</span><span class="p">))</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">masks</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">,:,:]))</span>
+
+<span class="n">a</span> <span class="o">=</span> <span class="n">images</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,:,:]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="n">a</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">RO</span><span class="p">,</span> <span class="n">E1</span><span class="p">))</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+<span class="n">show</span><span class="p">(</span><span class="n">make_grid</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">double</span><span class="p">(),</span> <span class="n">nrow</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">normalize</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">scale_each</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+
+<span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">16</span><span class="p">))</span>
+<span class="n">show</span><span class="p">(</span><span class="n">make_grid</span><span class="p">(</span><span class="n">masks</span><span class="o">.</span><span class="n">double</span><span class="p">(),</span> <span class="n">nrow</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">normalize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">scale_each</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">images</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">images</span><span class="o">.</span><span class="n">type</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">FloatTensor</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">masks</span><span class="o">.</span><span class="n">type</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">FloatTensor</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">training</span>
+<span class="kn">import</span> <span class="nn">models</span>
+<span class="kn">import</span> <span class="nn">hyper_search</span>
+<span class="kn">import</span> <span class="nn">plot_run</span>
+<span class="kn">from</span> <span class="nn">training</span> <span class="kn">import</span> <span class="n">dice_coeff</span><span class="p">,</span> <span class="n">centroid_diff</span><span class="p">,</span> <span class="n">adaptive_thresh</span>
+
+<span class="n">num_epochs</span> <span class="o">=</span> <span class="mi">120</span>
+<span class="n">print_every</span> <span class="o">=</span> <span class="mi">100000</span>
+
+<span class="n">inplanes</span> <span class="o">=</span> <span class="mi">96</span>
+<span class="n">layers</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+<span class="n">layers_planes</span><span class="o">=</span><span class="p">[</span><span class="mi">96</span><span class="p">,</span> <span class="mi">128</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">perf_dataset</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="n">C</span><span class="p">,</span> <span class="n">H</span><span class="p">,</span> <span class="n">W</span> <span class="o">=</span> <span class="n">perf_dataset</span><span class="o">.</span><span class="n">Gd</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">GadgetronResUnet18</span><span class="p">(</span><span class="n">F0</span><span class="o">=</span><span class="n">C</span><span class="p">,</span> 
+                                  <span class="n">inplanes</span><span class="o">=</span><span class="n">inplanes</span><span class="p">,</span> 
+                                  <span class="n">layers</span><span class="o">=</span><span class="n">layers</span><span class="p">,</span> 
+                                  <span class="n">layers_planes</span><span class="o">=</span><span class="n">layers_planes</span><span class="p">,</span> 
+                                  <span class="n">use_dropout</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> 
+                                  <span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> 
+                                  <span class="n">H</span><span class="o">=</span><span class="n">H</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="n">W</span><span class="p">,</span> <span class="n">C</span><span class="o">=</span><span class="n">num_classes</span><span class="p">,</span> <span class="c1"># background, lv, myo, rv, rv insertion</span>
+                                  <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="c1"># print(model)</span>
+
+
+<span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">device_count</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">DataParallel</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;model on multiple GPU ... &quot;</span><span class="p">)</span>
+    <span class="c1"># print(model)</span>
+
+<span class="n">patience</span> <span class="o">=</span> <span class="mi">5</span>
+<span class="n">factor</span> <span class="o">=</span> <span class="mf">0.5</span>
+<span class="n">cooldown</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">min_lr</span> <span class="o">=</span> <span class="mf">1e-5</span>
+
+<span class="n">weight_decay</span><span class="o">=</span><span class="mi">0</span>
+<span class="n">learning_rate</span> <span class="o">=</span> <span class="mf">1e-3</span>
+
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">optim</span><span class="o">.</span><span class="n">Adam</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span> <span class="n">lr</span><span class="o">=</span><span class="n">learning_rate</span><span class="p">,</span> <span class="n">betas</span><span class="o">=</span><span class="p">(</span><span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.999</span><span class="p">),</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-08</span><span class="p">,</span> <span class="n">weight_decay</span><span class="o">=</span><span class="n">weight_decay</span><span class="p">,</span> <span class="n">amsgrad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="c1"># optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay, nesterov=True)</span>
+
+<span class="n">scheduler</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">lr_scheduler</span><span class="o">.</span><span class="n">ReduceLROnPlateau</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="s1">&#39;min&#39;</span><span class="p">,</span> <span class="n">patience</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">criterion</span> <span class="o">=</span> <span class="n">training</span><span class="o">.</span><span class="n">LossMulti</span><span class="p">(</span><span class="n">class_weights</span><span class="o">=</span><span class="n">class_weights</span><span class="p">,</span> <span class="n">jaccard_weight</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="c1"># criterion = nn.BCEWithLogitsLoss()</span>
+<span class="c1"># criterion = nn.BCELoss()</span>
+
+<span class="n">log_dir</span> <span class="o">=</span> <span class="s1">&#39;perf_training/ResUnet&#39;</span> <span class="o">+</span> <span class="s1">&#39;_lr_&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">learning_rate</span><span class="p">)</span> <span class="o">+</span> <span class="s1">&#39;_epochs_&#39;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">num_epochs</span><span class="p">)</span>
+<span class="n">writer</span> <span class="o">=</span> <span class="n">SummaryWriter</span><span class="p">(</span><span class="n">log_dir</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">perf_trainer</span> <span class="o">=</span> <span class="n">training</span><span class="o">.</span><span class="n">GadgetronMultiClassSeg_Perf</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> 
+                                   <span class="n">optimizer</span><span class="p">,</span> 
+                                   <span class="n">criterion</span><span class="p">,</span> 
+                                   <span class="n">loader_for_train</span><span class="p">,</span> 
+                                   <span class="n">loader_for_val</span><span class="p">,</span> 
+                                   <span class="n">class_for_accu</span><span class="o">=</span><span class="n">class_for_accu</span><span class="p">,</span>
+                                   <span class="n">p_thres</span> <span class="o">=</span> <span class="n">p_thres</span><span class="p">,</span>
+                                   <span class="n">scheduler</span><span class="o">=</span><span class="n">scheduler</span><span class="p">,</span> 
+                                   <span class="n">epochs</span><span class="o">=</span><span class="n">num_epochs</span><span class="p">,</span> 
+                                   <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> 
+                                   <span class="n">x_dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> 
+                                   <span class="n">y_dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">,</span> 
+                                   <span class="n">early_stopping_thres</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>                              
+                                   <span class="n">print_every</span><span class="o">=</span><span class="n">print_every</span><span class="p">,</span>
+                                   <span class="n">small_data_mode</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> 
+                                   <span class="n">writer</span><span class="o">=</span><span class="n">writer</span><span class="p">,</span> 
+                                   <span class="n">model_folder</span><span class="o">=</span><span class="s2">&quot;perf_training/&quot;</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">epochs_traning</span><span class="p">,</span> <span class="n">epochs_validation</span><span class="p">,</span> <span class="n">best_model</span><span class="p">,</span> <span class="n">loss_all</span><span class="p">,</span> <span class="n">epochs_acc_class</span> <span class="o">=</span> <span class="n">perf_trainer</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">epoch_to_load</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">save_model_epoch</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">acc</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">acc_class</span> <span class="o">=</span> <span class="n">perf_trainer</span><span class="o">.</span><span class="n">check_validation_test_accuracy</span><span class="p">(</span><span class="n">loader_for_val</span><span class="p">,</span> <span class="n">best_model</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">acc</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">acc_class</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Saving-the-model">Saving the model<a class="anchor-link" href="#Saving-the-model"> </a></h2>
+</div>
+</div>
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">try</span><span class="p">:</span>
+    <span class="n">best_model_cpu</span> <span class="o">=</span> <span class="n">best_model</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">module</span>
+<span class="k">except</span><span class="p">:</span>
+    
+    <span class="n">best_model_cpu</span> <span class="o">=</span> <span class="n">best_model</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+    
+<span class="nb">print</span><span class="p">(</span><span class="n">best_model_cpu</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="n">perf_dataset</span><span class="o">.</span><span class="n">transform</span><span class="p">)</span>
+<span class="n">v</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">__version__</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">date</span>
+<span class="n">today</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">today</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">if</span><span class="p">(</span><span class="n">perf_dataset</span><span class="o">.</span><span class="n">transform</span><span class="o">==</span><span class="kc">None</span><span class="p">):</span>
+    <span class="n">model_file</span> <span class="o">=</span> <span class="s1">&#39;/home/xueh2/mrprogs/gadgetron_CMR_ML-source/deployment/networks/perf_&#39;</span> <span class="o">+</span> <span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">+</span> <span class="s1">&#39;_network_&#39;</span> <span class="o">+</span> <span class="n">today</span> <span class="o">+</span> <span class="s1">&#39;_CMR_View&#39;</span> <span class="o">+</span> <span class="s1">&#39;_Pytorch_&#39;</span> <span class="o">+</span> <span class="n">v</span> <span class="o">+</span> <span class="s1">&#39;.pbt&#39;</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="n">model_file</span> <span class="o">=</span> <span class="s1">&#39;/home/xueh2/mrprogs/gadgetron_CMR_ML-source/deployment/networks/perf_&#39;</span> <span class="o">+</span> <span class="n">perf_dataset</span><span class="o">.</span><span class="n">which_mask</span> <span class="o">+</span> <span class="s1">&#39;_network_&#39;</span> <span class="o">+</span> <span class="n">today</span> <span class="o">+</span> <span class="s1">&#39;_Pytorch_&#39;</span> <span class="o">+</span> <span class="n">v</span>  <span class="o">+</span> <span class="s1">&#39;.pbt&#39;</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">model_file</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1">## Correct save!</span>
+<span class="kn">import</span> <span class="nn">copy</span> 
+
+<span class="n">best_model_wts</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">best_model_cpu</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">state_dict</span><span class="p">())</span>
+
+<span class="n">empty_model</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">GadgetronResUnet18</span><span class="p">(</span><span class="n">F0</span><span class="o">=</span><span class="n">C</span><span class="p">,</span> 
+                                  <span class="n">inplanes</span><span class="o">=</span><span class="n">inplanes</span><span class="p">,</span> 
+                                  <span class="n">layers</span><span class="o">=</span><span class="n">layers</span><span class="p">,</span> 
+                                  <span class="n">layers_planes</span><span class="o">=</span><span class="n">layers_planes</span><span class="p">,</span> 
+                                  <span class="n">use_dropout</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> 
+                                  <span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> 
+                                  <span class="n">H</span><span class="o">=</span><span class="n">H</span><span class="p">,</span> <span class="n">W</span><span class="o">=</span><span class="n">W</span><span class="p">,</span> <span class="n">C</span><span class="o">=</span><span class="n">num_classes</span><span class="p">,</span> 
+                                  <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">empty_model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">best_model_wts</span><span class="p">)</span>
+
+<span class="c1">#print(empty_model)</span>
+
+<span class="c1">#torch.save(empty_model.state_dict(), &#39;/home/xueh2/cmr_ml/deployment/networks/abstract_network.dict&#39;)</span>
+<span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">empty_model</span><span class="p">,</span> <span class="n">model_file</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div class="jb_cell">
+
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># load test</span>
+<span class="c1"># work with python application</span>
+<span class="c1"># Runs on CPU so very slow</span>
+
+<span class="n">model_loaded</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">model_file</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">model_loaded</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+</div>
+</div>
+
+ 
+
+
+    </main>
+    
