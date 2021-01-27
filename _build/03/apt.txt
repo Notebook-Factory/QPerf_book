@@ -1,4 +1,0 @@
-gnuplot
-ghostscript
-octave
-octave-image
