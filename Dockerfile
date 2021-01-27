@@ -96,6 +96,8 @@ RUN apt-get update && \
 RUN cd $HOME/work;\
     pip install --upgrade pip; \
     pip install octave_kernel;   \
+	pip install	nbformat==5.1.2; \
+	pip install	nbconvert==6.0.7; \
     pip install sos\
                 sos-notebook \
                 sos-python \
@@ -115,7 +117,6 @@ RUN cd $HOME/work;\
 	pip install jupyter-book==0.6.4; \
 	pip install	imageio==2.9.0; \
 	pip install	matplotlib==3.1.3; \
-	pip install	nbconvert==6.0.7; \
 	pip install	notebook==6.0.3; \
 	pip install	numpy==1.19.2; \
 	pip install	pandas==1.2.0; \
