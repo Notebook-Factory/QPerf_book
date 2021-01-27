@@ -1,5 +1,5 @@
 % example of QPerf perfusion flow mapping
-
+pkg load image
 clear all
 close all
 
@@ -12,11 +12,11 @@ close all
 
 load perf_data_stress
 
-command = ['C:/Users/Dimitar/Downloads/QPerf-master/QPerf-master/software/QPerf/gadgetron_QPerf_mapping -f ./aif_stress -i ./data_stress -m ./MBF_stress --foot ' num2str(foot) ' --dt 500'];
+command = ['C:/Users/Dimitar/Downloads/QPerf/QPerf/gadgetron_QPerf_mapping -f ./aif_stress -i ./data_stress -m ./MBF_stress --foot ' num2str(foot) ' --dt 500'];
 dos(command);
 
 % load and visualize map
-fmap = analyze75read('MBF_stress');
+fmap = analyze75read('C:/Users/Dimitar/Downloads/octave/MBF_stress.hdr');
 
 figure; 
 plot(aif);
