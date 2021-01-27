@@ -159,9 +159,7 @@ RUN cd $HOME/work;\
 	pip install	matplotlib==3.1.3; \
 	pip install	mistune==0.8.4; \
 	pip install	mpmath==1.1.0; \
-	pip install	nbclient==0.5.1; \
-	pip install	nbconvert==5.6.1; \
-	pip install	nbformat==5.0.4; \
+	pip install	nbconvert==6.0.7; \
 	pip install	nest-asyncio==1.4.3; \
 	pip install	networkx==2.2; \
 	pip install	nose==1.3.7; \
