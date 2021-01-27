@@ -15,11 +15,11 @@
   url: /03/deep_learning/aif_detection/Perf_AIF_LV_detection
   not_numbered: true
 
-  - title: Perfusion mapping analysis
+- title: Perfusion mapping analysis
   url: /03/deep_learning/analysis/PerfusionSeg
   not_numbered: true
 
-  - title: Perfusion Flow mapping
+- title: Perfusion Flow mapping
   url: /03/examples/run_qperf
   not_numbered: true
   
