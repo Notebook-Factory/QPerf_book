@@ -113,8 +113,6 @@ RUN cd $HOME/work;\
                 ipywidgets \
                 nibabel; \
 	pip install jupyter-book==0.6.4; \
-	pip install nbconvert==6.0.7; \
-	pip install nbformat==5.1.2; \
 	pip install	appdirs==1.4.3; \
 	pip install	argon2-cffi==20.1.0; \
 	pip install	astor==0.8.1; \
