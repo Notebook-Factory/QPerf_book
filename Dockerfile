@@ -219,9 +219,9 @@ RUN cd $HOME/work;\
 	pip install	webencodings==0.5.1; \
 	pip install	widgetsnbextension==3.5.1; \
 	pip install	win-inet-pton==1.1.0; \
+	pip install	nbinteract; \
 	pip install	wincertstore==0.2; \
 	pip install	zipp==3.0.0; \
-	pip install	nbinteract; \
     python -m sos_notebook.install;\
     jupyter labextension install --minimize=False jupyterlab-sos; \
     git clone --single-branch -b main https://github.com/dimitarmileski/QPerf_book.git; \
