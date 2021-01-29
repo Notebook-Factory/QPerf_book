@@ -20,7 +20,7 @@
   not_numbered: true
 
 - title: Perfusion Flow mapping
-  url: /03/examples/run_qperf_sos
+  url: /03/Run_QPerf_SOS
   not_numbered: true
   
 - divider: true
