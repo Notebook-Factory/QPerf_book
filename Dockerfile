@@ -113,6 +113,8 @@ RUN cd $HOME/work;\
                 ipywidgets \
                 nibabel; \
 	pip install jupyter-book==0.6.4; \
+	pip install nbconvert==6.0.7; \
+	pip install nbformat==5.1.2; \
 	pip install	appdirs==1.4.3; \
 	pip install	argon2-cffi==20.1.0; \
 	pip install	astor==0.8.1; \
@@ -222,8 +224,6 @@ RUN cd $HOME/work;\
 	pip install	wincertstore==0.2; \
 	pip install	zipp==3.0.0; \
 	pip install	nbinteract; \
-	pip install nbconvert==6.0.7 --upgrade --user; \
-	pip install nbformat==5.1.2 --upgrade --user; \
     python -m sos_notebook.install;\
     jupyter labextension install --minimize=False jupyterlab-sos; \
     git clone --single-branch -b main https://github.com/dimitarmileski/QPerf_book.git; \
