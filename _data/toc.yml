@@ -1,0 +1,27 @@
+# Add a header and sample content section
+- header: Content
+
+# Top-level page
+- title: Introduction
+  url: /intro
+  not_numbered: true
+
+# A chapter w/ a collection of sections beneath it
+- title: Abstract
+  url: /01/abstract
+  not_numbered: true
+   
+- title: Perfusion AIF LV detection
+  url: /03/deep_learning/aif_detection/Perf_AIF_LV_detection
+  not_numbered: true
+
+- title: Perfusion Flow mapping
+  url: /03/Run_QPerf_SOS
+  not_numbered: true
+  
+- divider: true
+
+- title: GitHub repository
+  url: https://github.com/xueh2/QPerf
+  external: true
+  not_numbered: true
