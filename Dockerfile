@@ -209,7 +209,6 @@ RUN cd $HOME/work;\
 	pip install	tifffile==2020.12.8; \
 	pip install	torch==1.7.1; \
 	pip install	torchvision==0.8.2; \
-	pip install	tornado==6.0.3; \
 	pip install	tqdm==4.55.0; \
 	pip install	traitlets==4.3.3; \
 	pip install	typing-extensions==3.7.4.3; \
